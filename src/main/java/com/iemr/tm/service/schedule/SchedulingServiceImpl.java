@@ -22,7 +22,9 @@
 package com.iemr.tm.service.schedule;
 
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -37,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.iemr.tm.data.schedule.Slot;
 import com.iemr.tm.data.schedule.SpecialistAvailability;
@@ -91,8 +94,10 @@ public class SchedulingServiceImpl implements SchedulingService {
 		// A - Available doctor is on duty hours
 		// B - Booked slot for doctor
 		// C - Cancel appointment
-		Integer startslot = ((startTime.getHours() * 60) + (startTime.getMinutes())) / 5;
-		Integer endslot = ((endTime.getHours() * 60) + (endTime.getMinutes())) / 5;
+		LocalTime startLocal = startTime.toLocalDateTime().toLocalTime();
+		LocalTime endLocal = endTime.toLocalDateTime().toLocalTime();
+		Integer startslot = ((startLocal.getHour() * 60) + startLocal.getMinute()) / 5;
+		Integer endslot = ((endLocal.getHour() * 60) + endLocal.getMinute()) / 5;
 		
 		String currentstatus = slotdetail.substring(startslot, endslot);
 
@@ -130,6 +135,7 @@ public class SchedulingServiceImpl implements SchedulingService {
 	}
 
 	@Override
+	@Transactional(rollbackFor = TMException.class)
 	public SpecialistAvailabilityDetail markAvailability(SpecialistAvailabilityDetail specialistInput)
 			throws TMException {
 		
@@ -140,11 +146,12 @@ public class SchedulingServiceImpl implements SchedulingService {
 
 		logger.info("specialistInput result" + specialistInput.toString());
 		Date temp = specialistInput.getConfiguredFromDate();
-		final Date startDate = new Date(temp.getYear(), temp.getMonth(), temp.getDate());
-		
+		final Date startDate = Date.from(
+				LocalDate.ofInstant(temp.toInstant(), ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant());
 
 		Date temp1 = specialistInput.getConfiguredToDate();
-		final Date endDate = new Date(temp1.getYear(), temp1.getMonth(), temp1.getDate());
+		final Date endDate = Date.from(
+				LocalDate.ofInstant(temp1.toInstant(), ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant());
 		final String createdBy = specialistInput.getCreatedBy();
 		final Long userID = specialistInput.getUserID();
 
@@ -172,35 +179,28 @@ public class SchedulingServiceImpl implements SchedulingService {
 	
 
 		List<Integer> excludedays = specialistInput.getExcludeDays();
-		IntStream.rangeClosed(0, durationDays).forEach(e -> {
-
-			try {
-				Date i = new Date(startDate.getTime());
-				i.setDate(i.getDate() + e);
-				Integer day = i.getDay();
-				if (!(excludedays != null && excludedays.size() > 0 && excludedays.contains(day))) {
-					System.out.println(i);
-					SpecialistAvailability now = result.get(i);
-					if (now == null) {
-						now = new SpecialistAvailability();
-						now.setUserID(userID);
-						now.setConfiguredDate((Date) i.clone());
-						now.setTimeSlot(initializeString());
-						now.setCreatedBy(createdBy);
-					} else {
-						now.setModifiedBy(createdBy);
-					}
-					now.setTimeSlot(updateString(now.getTimeSlot(), startTime, endTime, 'A'));
-
-					output.add(now);
-					logger.info("printintg" + now.toString());
+		for (int e = 0; e <= durationDays; e++) {
+			Date i = new Date(startDate.getTime());
+			i.setDate(i.getDate() + e);
+			Integer day = i.getDay();
+			if (!(excludedays != null && excludedays.size() > 0 && excludedays.contains(day))) {
+				System.out.println(i);
+				SpecialistAvailability now = result.get(i);
+				if (now == null) {
+					now = new SpecialistAvailability();
+					now.setUserID(userID);
+					now.setConfiguredDate((Date) i.clone());
+					now.setTimeSlot(initializeString());
+					now.setCreatedBy(createdBy);
+				} else {
+					now.setModifiedBy(createdBy);
 				}
+				now.setTimeSlot(updateString(now.getTimeSlot(), startTime, endTime, 'A'));
 
-			} catch (TMException e1) {
-			
-				e1.printStackTrace();
+				output.add(now);
+				logger.info("printintg" + now.toString());
 			}
-		});
+		}
 		logger.info("output result" + output.toString());
 		specialistAvailabilityRepo.saveAll(output);
 		specialistInput = specialistAvailabilityDetailRepo.save(specialistInput);
@@ -214,7 +214,8 @@ public class SchedulingServiceImpl implements SchedulingService {
 			throws TMException {
 		
 		Date temp = specialistInput.getConfiguredFromDate();
-		Date startDate = new Date(temp.getYear(), temp.getMonth(), temp.getDate());
+		Date startDate = Date.from(
+				LocalDate.ofInstant(temp.toInstant(), ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant());
 
 		Timestamp startTime = specialistInput.getConfiguredFromTime();
 		Timestamp endTime = specialistInput.getConfiguredToTime();
@@ -299,7 +300,8 @@ public class SchedulingServiceImpl implements SchedulingService {
 	public String bookSlot(SpecialistInput2 specialistInput, char status) throws TMException {
 		
 		Date temp = specialistInput.getDate();
-		Date startDate = new Date(temp.getYear(), temp.getMonth(), temp.getDate());
+		Date startDate = Date.from(
+				LocalDate.ofInstant(temp.toInstant(), ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant());
 
 		SpecialistAvailability slotdetails = specialistAvailabilityRepo.findOneByConfiguredDateAndUserID(startDate,
 				specialistInput.getUserID());
