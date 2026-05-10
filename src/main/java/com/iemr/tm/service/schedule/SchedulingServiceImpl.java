@@ -25,6 +25,7 @@ import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -98,7 +99,11 @@ public class SchedulingServiceImpl implements SchedulingService {
 		LocalTime endLocal = endTime.toLocalDateTime().toLocalTime();
 		Integer startslot = ((startLocal.getHour() * 60) + startLocal.getMinute()) / 5;
 		Integer endslot = ((endLocal.getHour() * 60) + endLocal.getMinute()) / 5;
-		
+
+		if (startslot < 0 || endslot > slotdetail.length() || startslot >= endslot)
+			throw new TMException("Invalid slot window: startslot " + startslot + " endslot " + endslot
+					+ " for slotdetail length " + slotdetail.length());
+
 		String currentstatus = slotdetail.substring(startslot, endslot);
 
 		StringBuilder slotfinal = new StringBuilder();
@@ -155,8 +160,9 @@ public class SchedulingServiceImpl implements SchedulingService {
 		final String createdBy = specialistInput.getCreatedBy();
 		final Long userID = specialistInput.getUserID();
 
-		Integer durationDays = (int) ((endDate.getTime() - startDate.getTime()) / 86400000);
-		
+		LocalDate startLocalDate = LocalDate.ofInstant(startDate.toInstant(), ZoneId.systemDefault());
+		LocalDate endLocalDate = LocalDate.ofInstant(endDate.toInstant(), ZoneId.systemDefault());
+		long durationDays = ChronoUnit.DAYS.between(startLocalDate, endLocalDate);
 
 		Timestamp startTime = specialistInput.getConfiguredFromTime();
 		Timestamp endTime = specialistInput.getConfiguredToTime();
@@ -179,9 +185,9 @@ public class SchedulingServiceImpl implements SchedulingService {
 	
 
 		List<Integer> excludedays = specialistInput.getExcludeDays();
-		for (int e = 0; e <= durationDays; e++) {
-			Date i = new Date(startDate.getTime());
-			i.setDate(i.getDate() + e);
+		for (long e = 0; e <= durationDays; e++) {
+			LocalDate d = startLocalDate.plusDays(e);
+			Date i = Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant());
 			Integer day = i.getDay();
 			if (!(excludedays != null && excludedays.size() > 0 && excludedays.contains(day))) {
 				System.out.println(i);
